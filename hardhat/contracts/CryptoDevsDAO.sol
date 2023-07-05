@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
+import "@openzeppelin/contracts/access/Ownable.sol";// this is required for the Ownable contract
 
-import "@openzeppelin/contracts/access/Ownable.sol";
 
 //Interfaces for the fakeMarketplace
 
@@ -119,7 +119,7 @@ contract CryptoDevsDAO is Ownable {
     returns (uint256)
     {
         require(nftMarketplace.available(_nftTokenId), "NFT_NOT_FOR_SALE");
-        Proposal storage proposal = propasals[numProposals];
+        Proposal storage proposal = proposals[numProposals];
         proposal.nftTokenId = _nftTokenId;
         // set the proposal's voting deadline to be the(current time + 5 minutes)
 
@@ -152,7 +152,7 @@ contract CryptoDevsDAO is Ownable {
 
     // vote on proposal function
 
-    fucntion voteOnProposal(uint256 proposalIndex, Vote vote)
+    function voteOnProposal(uint256 proposalIndex, Vote vote)
     external
     nftHolderOnly
     activeProposalOnly(proposalIndex){
@@ -183,8 +183,61 @@ contract CryptoDevsDAO is Ownable {
     // final modifier
 
     modifier inactiveProposalOnly(uint256 proposalIndex) {
-        require(proposals[proposalIndex].deadline <= block.timestamp, "Deadline_not_exceeded"
+        require(
+            proposals[proposalIndex].deadline <= block.timestamp,
+            "DEADLINE_NOT_EXCEEDED"
+        );
+        require(
+            proposals[proposalIndex].executed == false,
+            "PROPOSAL_ALREADY_EXECUTED"
+        );
         _;
     }
+
+    // here we are going to write the execution proposal
+
+    // @dev execute proposal allows any CryptoDevs to execute a proposal after it's deadline has exceeded which was set to 5 minutes
+    // @param proposalIndex - the index of the proposal ito execute in the proposal array
+
+    function executeProposal(uint256 proposalIndex)
+    external
+    nftHolderOnly
+    inactiveProposalOnly(proposalIndex)
+{
+    Proposal storage proposal = proposals[proposalIndex];
+
+    // If the proposal has more YAY votes than NAY votes
+    // purchase the NFT from the FakeNFTMarketplace
+    if (proposal.yayVotes > proposal.nayVotes) {
+        uint256 nftPrice = nftMarketplace.getPrice();
+        require(address(this).balance >= nftPrice, "NOT_ENOUGH_FUNDS");
+        nftMarketplace.purchase{value: nftPrice}(proposal.nftTokenId);
+    }
+    proposal.executed = true;
+}
+
+
+    // now we have to allow the contract owner to withdraw the ETH from the DAO if needed 
+    // allow the contract toacceps further ETH depsits
+
+    // the ownable contract we inherit from , contains a modifier onlyOwner which restricts a function to only be able to be called by the contract  of the owner.
+
+    // now lets withdraw ethers using modifier
+
+    function withdrawEther() external onlyOwner {
+        uint256 amount = address(this).balance;
+        require(amount > 0, "Nothing to withdraw, contact balance empty" );// we need to check if the balance is greater than 0
+        (bool sent,) = payable(owner()).call{value: amount}(""); // we need to check if the transaction was successful
+        require(sent, "FAILED_TO_WITHDRAW_ETHER");
+
+        // This wil transfer the entire ETH  balance of the contract to owner address.
+
+    }
+
+    // NOTE normally , contract cannot accept ETH sent to them , unless it is payable function.
+
+    receive() external payable{}
+    fallback() external payable{}
+
 
 }

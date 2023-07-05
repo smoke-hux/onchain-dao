@@ -6,23 +6,65 @@
 // global scope, and execute the script.
 const hre = require("hardhat");
 
+async function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function main() {
-  const currentTimestampInSeconds = Math.round(Date.now() / 1000);
-  const unlockTime = currentTimestampInSeconds + 60;
 
-  const lockedAmount = hre.ethers.parseEther("0.001");
+  /// deploy the NFT  contract
+  const nftContract = await 
+  hre.ethers.deployContract("CryptoDevsNFT");
+  await nftContract.waitForDeployment();
+  console.log("CryptoDevsNFT deployed to:", nftContract.target);
 
-  const lock = await hre.ethers.deployContract("Lock", [unlockTime], {
-    value: lockedAmount,
-  });
+  // deploy the FAKE marketplace contract
 
-  await lock.waitForDeployment();
-
-  console.log(
-    `Lock with ${ethers.formatEther(
-      lockedAmount
-    )}ETH and unlock timestamp ${unlockTime} deployed to ${lock.target}`
+  const fakeMarketplaceContract = await hre.ethers.deployContract(
+    "FakeMarketplace"
   );
+
+  await fakeMarketplaceContract.waitForDeployment(); // here we wait for the deployment
+  console.log(
+    "fakeNFTMarketplace deployed to:", fakeMarketplaceContract.target
+  );// this is the address of the marketplace contract
+
+  // deploy the DAO  contract
+
+  const daoContract = await 
+  hre.ethers.deployContract("CryptoDevsDAO", [fakeMarketplaceContract.target, nftContract.target])// here we deploy the DAO contract
+  await daoContract.waitForDeployment();
+  console.log("CryptoDevsDAO deployed to:", daoContract.target);// the address of the DAO contract
+
+
+  // sleep for 30 seconds to let etherscan catchup with the deployments
+  await sleep(30 * 1000);
+
+  //verify the NFT Contract
+  await hre.run("verify:verify", {
+    address: nftContract.target, 
+    constructorArguments: [],
+  })
+
+  // verify the Fake Market place Contract
+
+  await hre.run("verify:verify", {
+    address: fakeMarketplaceContract.target,
+    constructorArguments: [],
+  })
+
+  // verify the DAO  contract
+
+  await hre.run("verify:verify", {
+    address: daoContract.target,
+    constructorArguments: [
+      fakeMarketplaceContract.target,
+      nftContract.target
+    ]
+  })
+
+
+
 }
 
 // We recommend this pattern to be able to use async/await everywhere
